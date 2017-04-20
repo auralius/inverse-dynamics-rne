@@ -39,7 +39,8 @@ rb.m = [1 1 1];
 rb.r = [-0.25 0 0; -0.25 0 0; -0.25 0 0]';
 
 % -------------------------------------------------------------------------
-% Arbitrary trajectory as the inputs
+% Arbitrary trajectory as the inputs: joint position, velocity, and 
+% acceleration
 ts = 0.001;
 time_span = 0:ts:1;
 qc = [pi/3*sin(2*pi*1*time_span)' pi/3*sin(2*pi*1*time_span)' pi/3*sin(2*pi*1*time_span)'];
@@ -72,11 +73,15 @@ Q = invdyn(dh, rb, qc, qcdot, qcddot);
 % ------------------------------------------------------------------------
 % Plotting
 figure;
-plot(time_span, Q', '-b')
-hold on
+hold on;
+plot(time_span, Q(1,:), 'b');
+plot(time_span, Q(2,:), 'r');
+plot(time_span, Q(3,:), 'g');
 
 % -------------------------------------------------------------------------
-% Using RVC Toolbox for comparison
+% For validation purpose, using RVC Toolbox for comparison
+% Disable these lines below if you don't want to try Peter Corkee's RVC 
+% toolbox
 L(1) = Revolute('d', 0, 'a', 0.5, 'alpha', 0, ...
     'm', rb.m(1), 'I', rb.I(:,:,1), 'r',  rb.r(:,1));
 L(2) = Revolute('d', 0, 'a', 0.5, 'alpha', 0, ...
@@ -86,7 +91,12 @@ L(3) = Revolute('d', 0, 'a', 0.5, 'alpha', 0, ...
 
 threelink = SerialLink(L, 'name', 'two link');
 torque_by_rvc_toolbox = threelink.rne(qc, qcdot, qcddot);
-plot(time_span, torque_by_rvc_toolbox, '--r')
+plot(time_span, torque_by_rvc_toolbox(:,1), '-.b', 'LineWidth', 2);
+plot(time_span, torque_by_rvc_toolbox(:,2), '-.r', 'LineWidth', 2);
+plot(time_span, torque_by_rvc_toolbox(:,3), '-.g', 'LineWidth', 2);
+
+legend('Torque 1', 'Torque 2', 'Torque 3', ...
+    'Torque 1 by RVC', 'Torque 2 by RVC', 'Torque 3 by RVC');
 
 end
 
@@ -178,9 +188,9 @@ for i = 1 : 1 : N_DOFS
     
     % Relative transformation
     T(:,:,i) = [ ct    -st*ca   st*sa     dh.a(i)*ct ; ...
-        st    ct*ca    -ct*sa    dh.a(i)*st ; ...
-        0     sa       ca        dh.d(i)    ; ...
-        0     0        0         1         ];
+                 st    ct*ca    -ct*sa    dh.a(i)*st ; ...
+                 0     sa       ca        dh.d(i)    ; ...
+                 0     0        0         1          ];
 end
 
 end
@@ -206,9 +216,9 @@ for i = 1 : 1 : N_DOFS
     sa = sin(dh.alpha(i));
     
     temp = temp * [ ct    -st*ca   st*sa     dh.a(i)*ct ; ...
-        st    ct*ca    -ct*sa    dh.a(i)*st ; ...
-        0     sa       ca        dh.d(i)    ; ...
-        0     0        0         1         ];
+                    st    ct*ca    -ct*sa    dh.a(i)*st ; ...
+                    0     sa       ca        dh.d(i)    ; ...
+                    0     0        0         1          ];
     T(:,:,i) = temp;
 end
 
