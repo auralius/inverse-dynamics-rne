@@ -54,9 +54,9 @@ EE = zeros(3, N_DOFS+1);
 COM = zeros(3, N_DOFS);    
 for k = 1 : length(time_span)  
     for i = 1 : 1 : N_DOFS
-        T = calc_transformation(dh, qc(k,:));
-        EE(:,i+1) = T(1:3,4, i);
-        COM(:,i) = EE(:,i+1) + T(1:3,1:3, i) * rb.r(:,i);
+        T = calc_transformation(0, i, dh, qc(k,:));
+        EE(:,i+1) = T(1:3,4);
+        COM(:,i) = EE(:,i+1) + T(1:3,1:3) * rb.r(:,i);
     end
     
     % Draw the robot
@@ -110,14 +110,14 @@ for k = 1 : length(qc)
     q = qc(k, :);
     qdot = qcdot(k, :);
     qddot = qcddot(k, :);
-    
-    T_rel = calc_rel_transformation(dh, q);
+
     N_DOFS = length(q);
     
     % ---------------------------------------------------------------------
     % Forward recursion
     for i = 1 : N_DOFS
-        R = T_rel(1:3, 1:3, i);
+        T = calc_transformation(i-1, i, dh, q);
+        R = T(1:3, 1:3);
         p = [dh.a(i); dh.d(i)*sin(dh.alpha(i)); dh.d(i)*cos(dh.alpha(i))];
         
         if i > 1
@@ -146,7 +146,8 @@ for k = 1 : length(qc)
         N = rb.I(:,:,i)*wdot(:,i)+cross(w(:,i),rb.I(:,:,i)*w(:,1));
         
         if i < N_DOFS
-            R = T_rel(1:3, 1:3, i+1);
+            T = calc_transformation(i, i+1, dh, q);
+            R = T(1:3, 1:3);
             n(:,i) = R*(n(:,i+1) + cross(R'*p, f(:,i+1))) + ...
                 cross(rb.r(:,i)+p,F) + N;
             f(:,i) = R*f(:,i+1) + F;
@@ -155,7 +156,8 @@ for k = 1 : length(qc)
             f(:,i) = F;
         end
         
-        R = T_rel(1:3, 1:3, i);
+        T = calc_transformation(i-1, i, dh, q);
+        R = T(1:3, 1:3);
         
         if dh.type(i) == 't'
             Q(i,k) = f(:,i)'*R'*z0;
@@ -167,14 +169,20 @@ end
 end
 
 % -------------------------------------------------------------------------
-function T = calc_rel_transformation(dh, qc)
-% Transformation current link end-effector respect the previous link
-% end-effector
+function  T = calc_transformation(from, to, dh, qc)
+% Transformation from one joint to another joint
+% 0<=from<N_DOFS
+% 0<to<=N_DOFS
 
+T = eye(4);
 N_DOFS = length(qc);
-T = repmat(eye(4), 1, 1, N_DOFS);
 
-for i = 1 : 1 : N_DOFS
+% Sanity check
+if (from >= N_DOFS) || (from < 0) || (to <= 0) || (to >  N_DOFS)
+    return;
+end
+
+for i = from+1 : to
     if dh.type(i) == 'r'
         dh.theta(i) = qc(i);
     elseif dh.type(i) == 'p'
@@ -186,41 +194,10 @@ for i = 1 : 1 : N_DOFS
     ca = cos(dh.alpha(i));
     sa = sin(dh.alpha(i));
     
-    % Relative transformation
-    T(:,:,i) = [ ct    -st*ca   st*sa     dh.a(i)*ct ; ...
-                 st    ct*ca    -ct*sa    dh.a(i)*st ; ...
-                 0     sa       ca        dh.d(i)    ; ...
-                 0     0        0         1          ];
+    T = T * [ ct    -st*ca   st*sa     dh.a(i)*ct ; ...
+              st    ct*ca    -ct*sa    dh.a(i)*st ; ...
+              0     sa       ca        dh.d(i)    ; ...
+              0     0        0         1          ];
 end
 
 end
-
-% -------------------------------------------------------------------------
-function  T = calc_transformation(dh, qc)
-% Transformation respect to the global frame (base of the robot)
-
-N_DOFS = length(qc);
-T = repmat(eye(4), 1, 1, N_DOFS);
-temp = eye(4);
-
-for i = 1 : 1 : N_DOFS
-    if dh.type(i) == 'r'
-        dh.theta(i) = qc(i);
-    elseif dh.type(i) == 'p'
-        dh.d(i) = qc(i);
-    end
-    
-    ct = cos(dh.theta(i) + dh.offset(i));
-    st = sin(dh.theta(i) + dh.offset(i));
-    ca = cos(dh.alpha(i));
-    sa = sin(dh.alpha(i));
-    
-    temp = temp * [ ct    -st*ca   st*sa     dh.a(i)*ct ; ...
-                    st    ct*ca    -ct*sa    dh.a(i)*st ; ...
-                    0     sa       ca        dh.d(i)    ; ...
-                    0     0        0         1          ];
-    T(:,:,i) = temp;
-end
-
-end
-
