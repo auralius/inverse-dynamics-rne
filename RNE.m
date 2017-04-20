@@ -32,48 +32,30 @@ dh.type = ['r' 'r' 'r'];
 % Rigid body paramaters: inertia, mass, and cener of mass
 rb.I =  repmat(eye(3), 1, 1, N_DOFS);
 rb.m = [1 1 1];
-% In standard DH, COM is mesured respect to its end-effector (using local 
-% frame). When COM is [0 0 0]', it means the COM is located exactly at the 
+% In standard DH, COM is mesured respect to its end-effector (using local
+% frame). When COM is [0 0 0]', it means the COM is located exactly at the
 % end-effector. Therefore, COM usually has negative values, which means the
 % COM is behind the end-effector
-rb.r = [-0.25 0 0; -0.25 0 0; -0.25 0 0]'; 
-
-% -------------------------------------------------------------------------
-% Relative transformation is respect to the EE of the previous joint
-T_rel = repmat(eye(4),1, 1, N_DOFS);
-T = repmat(eye(4),1, 1, N_DOFS);
-
-% -------------------------------------------------------------------------
-% Simulation time
-ts = 0.001;
-time_span = 0:ts:1;
+rb.r = [-0.25 0 0; -0.25 0 0; -0.25 0 0]';
 
 % -------------------------------------------------------------------------
 % Arbitrary trajectory as the inputs
-qc_ = [pi/3*sin(2*pi*1*time_span)' pi/3*sin(2*pi*1*time_span)' pi/3*sin(2*pi*1*time_span)'];
-qcdot_ = gradient(qc_', ts)';
-qcddot_ = gradient(qcdot_', ts)';
+ts = 0.001;
+time_span = 0:ts:1;
+qc = [pi/3*sin(2*pi*1*time_span)' pi/3*sin(2*pi*1*time_span)' pi/3*sin(2*pi*1*time_span)'];
+qcdot = gradient(qc', ts)';
+qcddot = gradient(qcdot', ts)';
 
 % -------------------------------------------------------------------------
-z0 = [0; 0; 1];
-
-% Simulation starts here!
-for k = 1 : length(time_span)
-    
-    % ---------------------------------------------------------------------
-    % Kinematic simulation
-    qc = qc_(k, :);
-    qcdot = qcdot_(k, :);
-    qcddot = qcddot_(k, :);
-    
-    % End-effector position, form the base which is located at r
-    EE = zeros(3, N_DOFS+1);
-    COM = zeros(3, N_DOFS);
+% Kinematic simulation, optional, for visualization purpose!   
+% End-effector position, form the base which is located at [0 0 0]'
+EE = zeros(3, N_DOFS+1);
+COM = zeros(3, N_DOFS);    
+for k = 1 : length(time_span)  
     for i = 1 : 1 : N_DOFS
-        T_rel = calc_rel_transformation(dh, qc);
-        T = calc_transformation(dh, qc);
+        T = calc_transformation(dh, qc(k,:));
         EE(:,i+1) = T(1:3,4, i);
-        COM(:,i) = EE(:,i+1) + T(1:3,1:3, i) * rb.r(:,i);        
+        COM(:,i) = EE(:,i+1) + T(1:3,1:3, i) * rb.r(:,i);
     end
     
     % Draw the robot
@@ -81,22 +63,62 @@ for k = 1 : length(time_span)
     set(h2, 'XData', EE(1, :), 'YData', EE(2, :),'ZData', EE(3, :));
     set(h3, 'XData', COM(1, :), 'YData', COM(2, :),'ZData', COM(3, :));
     drawnow;
+end
+
+% -------------------------------------------------------------------------
+% Here we go!
+Q = invdyn(dh, rb, qc, qcdot, qcddot);
+
+% ------------------------------------------------------------------------
+% Plotting
+figure;
+plot(time_span, Q', '-b')
+hold on
+
+% -------------------------------------------------------------------------
+% Using RVC Toolbox for comparison
+L(1) = Revolute('d', 0, 'a', 0.5, 'alpha', 0, ...
+    'm', rb.m(1), 'I', rb.I(:,:,1), 'r',  rb.r(:,1));
+L(2) = Revolute('d', 0, 'a', 0.5, 'alpha', 0, ...
+    'm', rb.m(2), 'I', rb.I(:,:,2), 'r', rb.r(:,2));
+L(3) = Revolute('d', 0, 'a', 0.5, 'alpha', 0, ...
+    'm', rb.m(3), 'I', rb.I(:,:,3), 'r', rb.r(:,3));
+
+threelink = SerialLink(L, 'name', 'two link');
+torque_by_rvc_toolbox = threelink.rne(qc, qcdot, qcddot);
+plot(time_span, torque_by_rvc_toolbox, '--r')
+
+end
+
+% -------------------------------------------------------------------------
+function Q = invdyn(dh, rb, qc, qcdot, qcddot)
+% Inverse dynamic with recursive Newton-Euler
+
+z0 = [0; 0; 1];
+
+for k = 1 : length(qc)  
+    q = qc(k, :);
+    qdot = qcdot(k, :);
+    qddot = qcddot(k, :);
+    
+    T_rel = calc_rel_transformation(dh, q);
+    N_DOFS = length(q);
     
     % ---------------------------------------------------------------------
     % Forward recursion
     for i = 1 : N_DOFS
         R = T_rel(1:3, 1:3, i);
         p = [dh.a(i); dh.d(i)*sin(dh.alpha(i)); dh.d(i)*cos(dh.alpha(i))];
-             
+        
         if i > 1
-            w(:, i) =  R'*(w(:, i-1) + z0.*qcdot(i));
-            wdot(:, i) = R'*(wdot(:, i-1) +  z0.*qcddot(i) + ...
-                cross(w(:, i-1), z0.*qcdot(i)));
+            w(:, i) =  R'*(w(:, i-1) + z0.*qdot(i));
+            wdot(:, i) = R'*(wdot(:, i-1) +  z0.*qddot(i) + ...
+                cross(w(:, i-1), z0.*qdot(i)));
             vdot(:,i) = R'*vdot(:,i-1) + cross(wdot(:,i), p) + ...
                 cross(w(:,i), cross(w(:,i),p));
         else
-            w(:, i) =  R'*(z0.*qcdot(i));
-            wdot(:, i) = R'*(z0.*qcddot(i));
+            w(:, i) =  R'*(z0.*qdot(i));
+            wdot(:, i) = R'*(z0.*qddot(i));
             vdot(:,i) = cross(wdot(:,i), p) + ...
                 cross(w(:,i), cross(w(:,i),p));
         end
@@ -106,7 +128,7 @@ for k = 1 : length(time_span)
     % Backward recursion
     for i = N_DOFS:-1:1
         p = [dh.a(i); dh.d(i)*sin(dh.alpha(i)); dh.d(i)*cos(dh.alpha(i))];
-                
+        
         vcdot = vdot(:,i) + cross(wdot(:,i),rb.r(:,i)) + ...
             cross(w(:,i),cross(w(:,i),rb.r(:,i)));
         
@@ -125,31 +147,13 @@ for k = 1 : length(time_span)
         
         R = T_rel(1:3, 1:3, i);
         
-        if dh.type(i) == 't'        
+        if dh.type(i) == 't'
             Q(i,k) = f(:,i)'*R'*z0;
-        elseif dh.type(i) == 'r'        
+        elseif dh.type(i) == 'r'
             Q(i,k) = n(:,i)'*R'*z0;
         end
     end
 end
-
-figure
-plot(time_span, Q', '-b')
-hold on
-
-% -------------------------------------------------------------------------
-% Using RVC Toolbox for comparison
-L(1) = Revolute('d', 0, 'a', 0.5, 'alpha', 0, ...
-    'm', rb.m(1), 'I', rb.I(:,:,1), 'r',  rb.r(:,1));
-L(2) = Revolute('d', 0, 'a', 0.5, 'alpha', 0, ...
-    'm', rb.m(2), 'I', rb.I(:,:,2), 'r', rb.r(:,2));
-L(3) = Revolute('d', 0, 'a', 0.5, 'alpha', 0, ...
-    'm', rb.m(3), 'I', rb.I(:,:,3), 'r', rb.r(:,3));
-
-threelink = SerialLink(L, 'name', 'two link');
-torque_by_rvc_toolbox = threelink.rne(qc_, qcdot_, qcddot_);
-plot(time_span, torque_by_rvc_toolbox, '--r')
-
 end
 
 % -------------------------------------------------------------------------
@@ -158,6 +162,7 @@ function T = calc_rel_transformation(dh, qc)
 % end-effector
 
 N_DOFS = length(qc);
+T = repmat(eye(4), 1, 1, N_DOFS);
 
 for i = 1 : 1 : N_DOFS
     if dh.type(i) == 'r'
@@ -182,9 +187,10 @@ end
 
 % -------------------------------------------------------------------------
 function  T = calc_transformation(dh, qc)
-% Transformation respect to the global frame
+% Transformation respect to the global frame (base of the robot)
 
 N_DOFS = length(qc);
+T = repmat(eye(4), 1, 1, N_DOFS);
 temp = eye(4);
 
 for i = 1 : 1 : N_DOFS
