@@ -68,7 +68,7 @@ end
 
 % -------------------------------------------------------------------------
 % Here we go!
-Q = invdyn(dh, rb, qc, qcdot, qcddot);
+Q = invdyn(dh, rb, qc, qcdot, qcddot, [0; -9.8; 0]);
 
 % ------------------------------------------------------------------------
 % Plotting
@@ -90,6 +90,7 @@ L(3) = Revolute('d', 0, 'a', 0.5, 'alpha', 0, ...
     'm', rb.m(3), 'I', rb.I(:,:,3), 'r', rb.r(:,3));
 
 threelink = SerialLink(L, 'name', 'two link');
+threelink.gravity = [0; -9.8; 0];
 torque_by_rvc_toolbox = threelink.rne(qc, qcdot, qcddot);
 plot(time_span, torque_by_rvc_toolbox(:,1), '-.b', 'LineWidth', 2);
 plot(time_span, torque_by_rvc_toolbox(:,2), '-.r', 'LineWidth', 2);
@@ -101,8 +102,12 @@ legend('Torque 1', 'Torque 2', 'Torque 3', ...
 end
 
 % -------------------------------------------------------------------------
-function Q = invdyn(dh, rb, qc, qcdot, qcddot)
+function Q = invdyn(dh, rb, qc, qcdot, qcddot, grav)
 % Inverse dynamic with recursive Newton-Euler
+
+if nargin < 6
+    grav = [0;0;0];
+end
 
 z0 = [0; 0; 1];
 
@@ -129,7 +134,7 @@ for k = 1 : length(qc)
         else
             w(:, i) =  R'*(z0.*qdot(i));
             wdot(:, i) = R'*(z0.*qddot(i));
-            vdot(:,i) = cross(wdot(:,i), p) + ...
+            vdot(:,i) = R'*grav + cross(wdot(:,i), p) + ...
                 cross(w(:,i), cross(w(:,i),p));
         end
     end
