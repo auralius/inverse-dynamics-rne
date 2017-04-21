@@ -6,4 +6,4 @@ Robot toolbox is used for comparison: http://www.petercorke.com/RTB/
 Download and extract the files.  Add the path to MATLAB using 'pathtool' command. Then type 'startup_rvc' in MATLAB command prompt.
 
 Limitations:  
-- No gravity and external force/torque (coming soon ;-) )  
+- No external force/torque (coming soon ;-) )  
