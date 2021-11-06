@@ -148,7 +148,7 @@ for k = 1 : length(qc)
             cross(w(:,i),cross(w(:,i),rb.r(:,i)));
         
         F = rb.m(i)*vcdot;
-        N = rb.I(:,:,i)*wdot(:,i)+cross(w(:,i),rb.I(:,:,i)*w(:,1));
+        N = rb.I(:,:,i)*wdot(:,i)+cross(w(:,i),rb.I(:,:,i)*w(:,i));
         
         if i < N_DOFS
             T = calc_transformation(i, i+1, dh, q);
